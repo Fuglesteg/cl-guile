@@ -48,5 +48,7 @@
                                0
                                (cffi:callback ,name)))))
 
+;; Example make procedure callable from scheme
+#+nil
 (define-scheme-procedure hello-from-scheme ()
   (format t "Hello from Scheme!!!!"))
