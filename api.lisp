@@ -41,7 +41,7 @@
 (in-package :guile/api)
 
 (define-foreign-library libguile
-  (:unix "/gnu/store/ylwk2vn18dkzkj0nxq2h4vjzhz17bm7c-guile-3.0.9/lib/libguile-3.0.so.1"))
+  (:unix "libguile-3.0.so.1"))
 
 (use-foreign-library libguile)
 
