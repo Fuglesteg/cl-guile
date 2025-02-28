@@ -24,7 +24,9 @@
 
 ;; TODO: Implement this
 (defun lisp->scm (lisp-object)
-  (api:string-eval (format nil "~a" lisp-object)))
+  (cond
+    ((null lisp-object) (cffi:make-pointer api::+scm-null+))
+    (t (api:eval-string (format nil "~a" lisp-object)))))
 
 (defun eval-string (string)
   (scm->lisp (api:eval-string string)))
