@@ -26,7 +26,7 @@
 (defun lisp->scm (lisp-object)
   (cond
     ((null lisp-object) (cffi:make-pointer api::+scm-null+))
-    (t (api:eval-string (format nil "~a" lisp-object)))))
+    (t (api:eval-string (format nil "~S" lisp-object)))))
 
 (defun eval-string (string)
   (scm->lisp (api:eval-string string)))
@@ -50,6 +50,17 @@
                                0
                                (cffi:callback ,name)))))
 
+#+nil(define-condition scheme-error (error))
+
+#+nil(define-scheme-procedure handle-scheme-exception (exception)
+  ; 1. Get scheme restarts
+  ; 2. Restart-bind
+  ; 3. signal scheme-error
+  (with-condition-restarts 'scheme-error
+      (loop for handler in (exception-handlers exception)
+            do 'something)
+    (signal 'scheme-error (exception-message exception))))
+   
 ;; Example make procedure callable from scheme
 #+nil
 (define-scheme-procedure hello-from-scheme ()
