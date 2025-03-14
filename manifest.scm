@@ -2,8 +2,11 @@
              (gnu packages lisp)
              (gnu packages lisp-xyz))
 
-(packages->manifest (append (map cadr 
-                                 (package-inputs (load "guix.scm"))) ; cl-guile
-                    (list
-                     sbcl
-                     sbcl-micros)))
+(define cl-guile (load "guix.scm"))
+
+(packages->manifest (append (filter package?
+                                    (map cadr
+                                         (package-development-inputs cl-guile)))
+                            (list
+                             sbcl
+                             sbcl-micros)))
