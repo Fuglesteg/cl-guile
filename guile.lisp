@@ -6,6 +6,16 @@
 
 (in-package :guile)
 
+;; TODO: Guile record conversion
+;; TODO: Error handling (with continuation restart)
+;; TODO: Preserve case (readtable?)
+;; TODO: Delayed evaluation of procedure declarations
+
+(defun init ()
+  (cffi:use-foreign-library api:libguile)
+  (api:init)
+  (api:eval-string "(use-modules (ice-9 exceptions))"))
+
 (defun scm->string (scm)
   (cffi:foreign-string-to-lisp (api:scm->string scm)))
 
@@ -33,7 +43,8 @@
 
 (defmacro guile (&body body)
   `(let ((*print-case* :downcase))
-     (eval-string (format nil "~S" ',@body))))
+     (eval-string
+      (format nil "(with-exception-handler (lambda (exception) (exception-message exception)) (lambda () ~S) #:unwind? #t)" ',@body))))
 
 (defmacro define-scheme-procedure (name lambda-list &body body)
   `(progn

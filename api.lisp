@@ -10,6 +10,7 @@
                 :use-foreign-library
                 :defcfun)
   (:export :init
+           :libguile
            :eval-string
            :scm-null-pointer-p
            :stringp
@@ -42,8 +43,6 @@
 
 (define-foreign-library libguile
   (:unix "libguile-3.0.so"))
-
-(use-foreign-library libguile)
 
 (defconstant +scm-null+ #X00000804)
 
