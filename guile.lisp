@@ -9,6 +9,7 @@
 ;; TODO: Guile record conversion
 ;; TODO: Error handling (with continuation restart)
 ;; TODO: Preserve case (readtable?)
+;; TODO: Fix/Look into guile init in all threads
 ;; Figure out parsing, inspecting lisp lambda list
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -25,9 +26,9 @@
 (defun scm->string (scm)
   (cffi:foreign-string-to-lisp (api:scm->string scm)))
 
-(defun scm-convert-record (scm-record)
-  )
-
+;; TODO: Symbols
+;; TODO: Keywords
+;; TODO: Records
 (defun scm->lisp (scm)
   (cond
     ((api:scm-null-pointer-p scm) nil)
@@ -50,11 +51,6 @@
 (defun eval-string (string)
   (scm->lisp (api:eval-string string)))
 
-(defmacro guile (&body body)
-  `(let ((*print-case* :downcase))
-     (eval-string
-      (format nil "(with-exception-handler (lambda (exception) (exception-message exception)) (lambda () ~S) #:unwind? #t)" ',@body))))
-
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *eval-on-init* nil)
   (defmacro delay-evaluation (&body body)
@@ -64,6 +60,12 @@
           (lambda ()
             ,@body)
           *eval-on-init*))))
+
+(defmacro guile (&body body)
+  `(let ((*print-case* :downcase))
+     (delay-evaluation
+       (eval-string
+        (format nil "(with-exception-handler (lambda (exception) (exception-message exception)) (lambda () (eval '(begin ~S) (current-module))) #:unwind? #t)" ',@body)))))
 
 (defun eval-on-init ()
   (loop for function in *eval-on-init*
