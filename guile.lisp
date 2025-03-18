@@ -9,15 +9,24 @@
 ;; TODO: Guile record conversion
 ;; TODO: Error handling (with continuation restart)
 ;; TODO: Preserve case (readtable?)
-;; TODO: Delayed evaluation of procedure declarations
+;; Figure out parsing, inspecting lisp lambda list
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *initialized* nil))
 
 (defun init ()
-  (cffi:use-foreign-library api:libguile)
-  (api:init)
-  (api:eval-string "(use-modules (ice-9 exceptions))"))
+  (unless *initialized*
+    (cffi:use-foreign-library api:libguile)
+    (api:init)
+    (api:eval-string "(use-modules (ice-9 exceptions))")
+    (eval-on-init)
+    (setf *initialized* t)))
 
 (defun scm->string (scm)
   (cffi:foreign-string-to-lisp (api:scm->string scm)))
+
+(defun scm-convert-record (scm-record)
+  )
 
 (defun scm->lisp (scm)
   (cond
@@ -30,7 +39,7 @@
     ((api:pairp scm) (cons 
                       (scm->lisp (api:car scm))
                       (scm->lisp (api:cdr scm))))
-    (t (error "Could not convert"))))
+    (t (error "Could not convert scheme object"))))
 
 ;; TODO: Implement this
 (defun lisp->scm (lisp-object)
@@ -46,22 +55,38 @@
      (eval-string
       (format nil "(with-exception-handler (lambda (exception) (exception-message exception)) (lambda () ~S) #:unwind? #t)" ',@body))))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *eval-on-init* nil)
+  (defmacro delay-evaluation (&body body)
+    (if *initialized*
+        `(progn ,@body)
+        `(push
+          (lambda ()
+            ,@body)
+          *eval-on-init*))))
+
+(defun eval-on-init ()
+  (loop for function in *eval-on-init*
+        do (funcall function))
+  (setf *eval-on-init* nil))
+
 (defmacro define-scheme-procedure (name lambda-list &body body)
   `(progn
      (defun ,name ,lambda-list
        ,@body)
      (defcallback ,name :pointer ,(mapcar (lambda (parameter)
-                                                (list parameter :pointer))
-                                              lambda-list)
+                                            (list parameter :pointer))
+                                          lambda-list)
        (lisp->scm (apply #',name (mapcar #'scm->lisp (list ,@lambda-list)))))
-     (cffi:with-foreign-string (scheme-procedure-name (string-downcase (symbol-name ',name)))
-       (api:scm-c-define-gsubr scheme-procedure-name
-                               ,(length lambda-list)
-                               0
-                               0
-                               (cffi:callback ,name)))))
+     (delay-evaluation
+       (cffi:with-foreign-string (scheme-procedure-name (string-downcase (symbol-name ',name)))
+         (api:scm-c-define-gsubr scheme-procedure-name
+                                 ,(length lambda-list)
+                                 0
+                                 0
+                                 (cffi:callback ,name))))))
 
-#+nil(define-condition scheme-error (error))
+(define-condition scheme-error (error) ())
 
 #+nil(define-scheme-procedure handle-scheme-exception (exception)
   ; 1. Get scheme restarts
