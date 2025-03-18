@@ -37,7 +37,9 @@
            :vectorp
            :nullp
            :scm-null-p
-           :scm-c-define-gsubr))
+           :scm-c-define-gsubr
+           :scm-call-0
+           :scm-call-1))
 
 (in-package :guile/api)
 
@@ -129,3 +131,9 @@
 ; SCM scm_c_define_gsubr (const char *name, int req, int opt, int rst, fcn)
 (defcfun ("scm_c_define_gsubr" scm-c-define-gsubr) :pointer
   (name :pointer) (req :int) (opt :int) (rst :int) (fcn :pointer))
+
+(defcfun ("scm_call_0" scm-call-0) :pointer
+  (scheme-object-function :pointer))
+
+(defcfun ("scm_call_1" scm-call-1) :pointer
+  (scheme-object-function :pointer) (scheme-object :pointer))

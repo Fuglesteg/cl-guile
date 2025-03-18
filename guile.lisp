@@ -6,7 +6,6 @@
 
 (in-package :guile)
 
-;; TODO: Guile record conversion
 ;; TODO: Error handling (with continuation restart)
 ;; TODO: Preserve case (readtable?)
 ;; TODO: Fix/Look into guile init in all threads
@@ -40,6 +39,8 @@
     ((api:pairp scm) (cons 
                       (scm->lisp (api:car scm))
                       (scm->lisp (api:cdr scm))))
+    ((scm->lisp (api:scm-call-1 (api:eval-string "record?") scm))
+     (scm->lisp (api:scm-call-1 (api:eval-string "record-details") scm)))
     (t (error "Could not convert scheme object"))))
 
 ;; TODO: Implement this
