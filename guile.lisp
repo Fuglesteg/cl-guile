@@ -100,6 +100,17 @@
     (signal 'scheme-error (exception-message exception))))
    
 ;; Example make procedure callable from scheme
-#+nil
 (define-scheme-procedure hello-from-scheme ()
   (format t "Hello from Scheme!!!!"))
+
+(guile
+  (define (record-details scm-record)
+    (let* ((record-type-descriptor (record-type-descriptor scm-record))
+           (record-type-fields (record-type-fields record-type-descriptor))
+           (record-type-name (record-type-name record-type-descriptor)))
+      (list (symbol->string record-type-name) (map-in-order (let ((i -1))
+                                                              (lambda (field)
+                                                                (set! i (+ i 1))
+                                                                (cons (symbol->string field)
+                                                                      (struct-ref scm-record i))))
+                                                            record-type-fields)))))
