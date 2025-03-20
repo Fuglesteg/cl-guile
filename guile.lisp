@@ -25,9 +25,6 @@
 (defun scm->string (scm)
   (cffi:foreign-string-to-lisp (api:scm->string scm)))
 
-;; TODO: Symbols
-;; TODO: Keywords
-;; TODO: Records
 (defun scm->lisp (scm)
   (cond
     ((api:scm-null-pointer-p scm) nil)
@@ -36,7 +33,19 @@
     ((api:exact-integer-p scm) (api:scm->int32 scm))
     ((api:realp scm) (api:scm->double scm))
     ((api:stringp scm) (scm->string scm))
-    ((api:pairp scm) (cons 
+    ((api:keywordp scm)
+     (intern
+      (string-upcase
+       (scm->string
+        (api:scm-call-1 (api:eval-string "symbol->string")
+                        (api:scm-call-1 (api:eval-string "keyword->symbol") scm))))
+      'keyword))
+    ((api:scm->bool (api:symbolp scm))
+     (intern
+      (string-upcase
+       (scm->string
+        (api:scm-call-1 (api:eval-string "symbol->string") scm)))))
+    ((api:pairp scm) (cons
                       (scm->lisp (api:car scm))
                       (scm->lisp (api:cdr scm))))
     ((scm->lisp (api:scm-call-1 (api:eval-string "record?") scm))
@@ -109,9 +118,10 @@
     (let* ((record-type-descriptor (record-type-descriptor scm-record))
            (record-type-fields (record-type-fields record-type-descriptor))
            (record-type-name (record-type-name record-type-descriptor)))
-      (list (symbol->string record-type-name) (map-in-order (let ((i -1))
-                                                              (lambda (field)
-                                                                (set! i (+ i 1))
-                                                                (cons (symbol->string field)
-                                                                      (struct-ref scm-record i))))
-                                                            record-type-fields)))))
+      (list record-type-name
+            (map-in-order (let ((i -1))
+                            (lambda (field)
+                              (set! i (+ i 1))
+                              (cons field
+                                    (struct-ref scm-record i))))
+                          record-type-fields)))))
