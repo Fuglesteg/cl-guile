@@ -9,6 +9,7 @@
 ;; TODO: Error handling (with continuation restart)
 ;; TODO: Preserve case (readtable?)
 ;; TODO: Fix/Look into guile init in all threads
+;; TODO: Records to class
 ;; Figure out parsing, inspecting lisp lambda list
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -18,7 +19,7 @@
   (unless *initialized*
     (cffi:use-foreign-library api:libguile)
     (api:init)
-    (api:eval-string "(use-modules (ice-9 exceptions))")
+    (api:eval-string "(use-modules (ice-9 exceptions) (ice-9 format))")
     (eval-on-init)
     (setf *initialized* t)))
 
@@ -75,7 +76,7 @@
   `(let ((*print-case* :downcase))
      (delay-evaluation
        (eval-string
-        (format nil "(with-exception-handler (lambda (exception) (exception-message exception)) (lambda () (eval '(begin ~S) (current-module))) #:unwind? #t)" ',@body)))))
+        (format nil "(with-exception-handler (lambda (exception) (call-with-output-string (lambda (port) (print-exception port #f (exception-kind exception) (exception-args exception))))) (lambda () (eval '(begin ~S) (current-module))) #:unwind? #t)" ',@body)))))
 
 (defun eval-on-init ()
   (loop for function in *eval-on-init*
