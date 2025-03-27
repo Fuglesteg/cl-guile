@@ -69,8 +69,8 @@
 
 ;; TODO: Implement this
 (defun lisp->scm (lisp-object)
-  (cond
-    ((null lisp-object) (cffi:make-pointer api::+scm-null+))
+  (typecase lisp-object
+    (null (cffi:make-pointer api::+scm-null+))
     (t (api:eval-string (format nil "~S" lisp-object)))))
 
 (defun eval-string (string)
