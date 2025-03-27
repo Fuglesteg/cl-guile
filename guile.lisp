@@ -9,7 +9,6 @@
 ;; TODO: Error handling (with continuation restart)
 ;; TODO: Preserve case / #t, #f ... (readtable?)
 ;; TODO: Fix/Look into guile init in all threads
-;; TODO: Records to class
 ;; TODO: Optimize `scheme` macro by evaluation to function and calling function
 ;; TODO: guile stdout = *standard-output*
 ;; Figure out parsing, inspecting lisp lambda list
@@ -38,9 +37,7 @@
     (setf *initialized* t)))
 
 (defun scm->string (scm)
-  (multiple-value-bind (string)
-      (cffi:foreign-string-to-lisp (api:scm->string scm))
-    string))
+      (values (cffi:foreign-string-to-lisp (api:scm->string scm))))
 
 (defun scm->lisp (scm)
   (cond
@@ -72,10 +69,50 @@
        (scm->string
         (api:scm-call-1 (api:eval-string "symbol->string") scm)))))
     ((scm->lisp (api:scm-call-1 (api:eval-string "record?") scm))
-     (scm->lisp (api:scm-call-1 (api:eval-string "record-details") scm)))
+     (convert-record (scm->lisp (api:scm-call-1 (api:eval-string "record-details") scm))))
     (t (error "Could not convert scheme object"))))
 
-;; TODO: Implement this
+(defun convert-record (record-details)
+  (destructuring-bind (name slots) record-details
+    (let ((class-name (cdr (assoc name *scheme-record-types*))))
+      (if class-name
+          (apply #'make-instance class-name
+                 (mapcan (lambda (pair)
+                           (list (car pair) (cdr pair)))
+                         slots))
+          record-details))))
+
+(defclass scm-record () ())
+
+(defvar *scheme-record-types* nil)
+
+(defmacro define-scheme-record (name superclasses slots)
+  (destructuring-bind (class-name record-name)
+      (if (consp name)
+          name
+          (list name name))
+  `(progn
+     (defclass ,class-name (,@superclasses scm-record)
+       ,slots)
+     (setf *scheme-record-types* (append (list (cons ',record-name ',class-name))
+                                         *scheme-record-types*)))))
+
+(define-scheme-record (scm-compound-exception &compound-exception) ()
+  ((components
+    :initarg :components
+    :initform nil
+    :accessor scm-compound-exception-components
+    :type list)))
+
+(define-scheme-record (scm-exception &exception) () ())
+
+(define-scheme-record (scm-exception-with-message &message) (scm-exception)
+  ((message
+    :initarg :message
+    :initform ""
+    :accessor scm-exception-message
+    :type string)))
+
 (defun lisp->scm (lisp-object)
   (labels ((as-is () (api:eval-string (format nil "~S" lisp-object))))
     (if (eq t lisp-object)
@@ -126,7 +163,7 @@
             (map-in-order (let ((i -1))
                             (lambda (field)
                               (set! i (+ i 1))
-                              (cons field
+                              (cons (symbol->keyword field)
                                     (struct-ref scm-record i))))
                           record-type-fields)))))
 
@@ -148,11 +185,12 @@
 
 (define-condition scheme-error (error) ())
 
-#+nil(define-scheme-procedure handle-scheme-exception (exception)
+(define-scheme-procedure handle-scheme-exception (exception)
   ; 1. Get scheme restarts
   ; 2. Restart-bind
   ; 3. signal scheme-error
-  (with-condition-restarts 'scheme-error
+  (break "~S" exception)
+  #+nil(with-condition-restarts 'scheme-error
       (loop for handler in (exception-handlers exception)
             do 'something)
     (signal 'scheme-error (exception-message exception))))
@@ -161,15 +199,5 @@
 (define-scheme-procedure hello-from-scheme ()
   (format t "Hello from Scheme!!!!"))
 
-(guile
-  (define (record-details scm-record)
-    (let* ((record-type-descriptor (record-type-descriptor scm-record))
-           (record-type-fields (record-type-fields record-type-descriptor))
-           (record-type-name (record-type-name record-type-descriptor)))
-      (list record-type-name
-            (map-in-order (let ((i -1))
-                            (lambda (field)
-                              (set! i (+ i 1))
-                              (cons field
-                                    (struct-ref scm-record i))))
-                          record-type-fields)))))
+(define-scheme-procedure say-name (name)
+  (format t "Hello ~a" name))
