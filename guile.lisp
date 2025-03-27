@@ -48,6 +48,15 @@
     ((api:exact-integer-p scm) (api:scm->int32 scm))
     ((api:realp scm) (api:scm->double scm))
     ((api:stringp scm) (scm->string scm))
+    ((api:pairp scm) (cons
+                      (scm->lisp (api:car scm))
+                      (scm->lisp (api:cdr scm))))
+    ((api:scm->bool (api:scm-call-1 (api:eval-string "procedure?") scm))
+     (lambda (&rest args)
+       (let* ((scm-args (cffi:foreign-alloc :pointer :initial-contents (mapcar #'lisp->scm args)))
+              (result (api:scm-call-n scm scm-args (length args))))
+         (cffi:foreign-free scm-args)
+         (scm->lisp result))))
     ((api:keywordp scm)
      (intern
       (string-upcase
