@@ -77,9 +77,18 @@
 
 ;; TODO: Implement this
 (defun lisp->scm (lisp-object)
-  (typecase lisp-object
-    (null (cffi:make-pointer api::+scm-null+))
-    (t (api:eval-string (format nil "~S" lisp-object)))))
+  (labels ((as-is () (api:eval-string (format nil "~S" lisp-object))))
+    (if (eq t lisp-object)
+        (api:eval-string "#t")
+        (etypecase lisp-object
+          (null (api:eval-string "#f"))
+          (cons (api:cons
+                 (lisp->scm (car lisp-object))
+                 (lisp->scm (cdr lisp-object))))
+          (keyword (api:string->scm-keyword (string-downcase (string lisp-object))))
+          (symbol (api:string->scm-symbol (string-downcase (string lisp-object))))
+          (number (as-is))
+          (string (as-is))))))
 
 (defun eval-string (string)
   (scm->lisp (api:eval-string string)))
@@ -105,8 +114,6 @@
 
 (defun eval-on-init ()
   (loop for function in *eval-on-init*
-        for i from 0
-        do (format t "Calling function ~a" i)
         do (funcall function))
   (setf *eval-on-init* nil))
 

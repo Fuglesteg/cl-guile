@@ -22,17 +22,21 @@
            :scm->float
            :boolp
            :scm->bool
+           :bool->scm-bool
            :realp
            :scm->double
            :charp
            :scm-char->integer
            :symbolp
            :scm-symbol->string
+           :string->scm-symbol
            :keywordp
            :scm-keyword->scm-symbol
+           :string->scm-keyword
            :pairp
            :car
            :cdr
+           :cons
            :listp
            :vectorp
            :nullp
@@ -78,12 +82,6 @@
 (defcfun ("scm_to_float" scm->float) :float
   (scheme-object :pointer))
 
-(defcfun ("scm_is_bool" boolp) :boolean
-  (scheme-object :pointer))
-
-(defcfun ("scm_to_bool" scm->bool) :boolean
-  (scheme-object :pointer))
-
 (defcfun ("scm_is_real" realp) :boolean
   (scheme-object :pointer))
 
@@ -96,17 +94,40 @@
 (defcfun ("scm_char_to_integer" scm-char->integer) :int
   (scheme-object :pointer))
 
+;;; Booleans
+
+(defcfun ("scm_is_bool" boolp) :boolean
+  (scheme-object :pointer))
+
+(defcfun ("scm_to_bool" scm->bool) :boolean
+  (scheme-object :pointer))
+
+(defcfun ("scm_from_bool" bool->scm-bool) :pointer
+  (scheme-object :boolean))
+
+;;; Symbols
+
 (defcfun ("scm_symbol_p" symbolp) :pointer
   (scheme-object :pointer))
 
 (defcfun ("scm_symbol_to_string" scm-symbol->string) :int
   (scheme-object :pointer))
 
+(defcfun ("scm_from_locale_symbol" string->scm-symbol) :pointer
+  (string :string))
+
+;;; Keywords
+
 (defcfun ("scm_is_keyword" keywordp) :boolean
   (scheme-object :pointer))
 
 (defcfun ("scm_keyword_to_symbol" scm-keyword->scm-symbol) :int
   (scheme-object :pointer))
+
+(defcfun ("scm_from_locale_keyword" string->scm-keyword) :pointer
+  (string :string))
+
+;; Pairs
 
 (defcfun ("scm_is_pair" pairp) :boolean
   (scheme-object :pointer))
@@ -116,6 +137,11 @@
 
 (defcfun ("scm_cdr" cdr) :pointer
   (scheme-object :pointer))
+
+(defcfun ("scm_cons" cons) :pointer
+  (scheme-object-car :pointer) (scheme-object-cdr :pointer))
+
+;; Sequences
 
 (defcfun ("scm_list_p" listp) :pointer
   (scheme-object :pointer))
