@@ -20,6 +20,18 @@
     (cffi:use-foreign-library api:libguile)
     (api:init)
     (api:eval-string "(use-modules (ice-9 exceptions) (ice-9 format))")
+    (api:eval-string
+     "(define (safe-eval exp)
+       (with-exception-handler
+           (lambda (exception)
+             (call-with-output-string
+              (lambda (port)
+                (print-exception port
+                                 #f
+                                 (exception-kind exception)
+                                 (exception-args exception)))))
+         (lambda () (eval exp (current-module)))
+         #:unwind? #t))")
     (eval-on-init)
     (setf *initialized* t)))
 
@@ -69,21 +81,39 @@
   (defmacro delay-evaluation (&body body)
     (if *initialized*
         `(progn ,@body)
-        `(push
-          (lambda ()
-            ,@body)
-          *eval-on-init*))))
-
-(defmacro guile (&body body)
-  `(let ((*print-case* :downcase))
-     (delay-evaluation
-       (eval-string
-        (format nil "(with-exception-handler (lambda (exception) (call-with-output-string (lambda (port) (print-exception port #f (exception-kind exception) (exception-args exception))))) (lambda () (eval '(begin ~S) (current-module))) #:unwind? #t)" ',@body)))))
+        `(setf *eval-on-init*
+               (append
+                (list
+                 (lambda ()
+                  ,@body))
+                *eval-on-init*))))
+  (defmacro scheme (&body body)
+    `(eval-string
+      ,(let ((*print-case* :downcase))
+         (format nil "(safe-eval '(begin ~{~S~}))" body))))
+  (defmacro scheme-toplevel (&body body)
+    `(delay-evaluation
+       (scheme ,@body))))
 
 (defun eval-on-init ()
   (loop for function in *eval-on-init*
+        for i from 0
+        do (format t "Calling function ~a" i)
         do (funcall function))
   (setf *eval-on-init* nil))
+
+(scheme-toplevel
+  (define (record-details scm-record)
+    (let* ((record-type-descriptor (record-type-descriptor scm-record))
+           (record-type-fields (record-type-fields record-type-descriptor))
+           (record-type-name (record-type-name record-type-descriptor)))
+      (list record-type-name
+            (map-in-order (let ((i -1))
+                            (lambda (field)
+                              (set! i (+ i 1))
+                              (cons field
+                                    (struct-ref scm-record i))))
+                          record-type-fields)))))
 
 (defmacro define-scheme-procedure (name lambda-list &body body)
   `(progn
