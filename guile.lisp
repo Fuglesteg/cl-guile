@@ -24,7 +24,9 @@
     (setf *initialized* t)))
 
 (defun scm->string (scm)
-  (cffi:foreign-string-to-lisp (api:scm->string scm)))
+  (multiple-value-bind (string)
+      (cffi:foreign-string-to-lisp (api:scm->string scm))
+    string))
 
 (defun scm->lisp (scm)
   (cond
