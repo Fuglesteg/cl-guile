@@ -7,9 +7,11 @@
 (in-package :guile)
 
 ;; TODO: Error handling (with continuation restart)
-;; TODO: Preserve case (readtable?)
+;; TODO: Preserve case / #t, #f ... (readtable?)
 ;; TODO: Fix/Look into guile init in all threads
 ;; TODO: Records to class
+;; TODO: Optimize `scheme` macro by evaluation to function and calling function
+;; TODO: guile stdout = *standard-output*
 ;; Figure out parsing, inspecting lisp lambda list
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -19,7 +21,7 @@
   (unless *initialized*
     (cffi:use-foreign-library api:libguile)
     (api:init)
-    (api:eval-string "(use-modules (ice-9 exceptions) (ice-9 format))")
+    (api:eval-string "(use-modules (ice-9 exceptions))")
     (api:eval-string
      "(define (safe-eval exp)
        (with-exception-handler
@@ -69,9 +71,6 @@
       (string-upcase
        (scm->string
         (api:scm-call-1 (api:eval-string "symbol->string") scm)))))
-    ((api:pairp scm) (cons
-                      (scm->lisp (api:car scm))
-                      (scm->lisp (api:cdr scm))))
     ((scm->lisp (api:scm-call-1 (api:eval-string "record?") scm))
      (scm->lisp (api:scm-call-1 (api:eval-string "record-details") scm)))
     (t (error "Could not convert scheme object"))))
