@@ -6,8 +6,8 @@
 
 (in-package :guile)
 
-;; TODO: Preserve case / #t, #f ... (readtable?)
 ;; TODO: Continuation restart
+;; TODO: Preserve case
 ;; TODO: Fix/Look into guile init in all threads
 ;; TODO: Optimize `scheme` macro by evaluation to function and calling function
 ;; TODO: guile stdout = *standard-output*
@@ -72,6 +72,18 @@
     ((scm->lisp (api:scm-call-1 (api:eval-string "record?") scm))
      (convert-record (scm->lisp (api:scm-call-1 (api:eval-string "record-details") scm))))
     (t (error "Could not convert scheme object"))))
+
+;; TODO: Add disable, store *readtable*
+(defun enable-scheme-syntax ()
+  (set-dispatch-macro-character #\# #\t
+                                (lambda (stream disp-char sub-char)
+                                  (declare (ignore stream disp-char sub-char))
+                                  ''|#T|))
+  (set-dispatch-macro-character #\# #\f
+                                (lambda (stream disp-char sub-char)
+                                  (declare (ignore stream disp-char sub-char))
+                                  ''|#F|)))
+
 
 (defun convert-record (record-details)
   (destructuring-bind (name slots) record-details
