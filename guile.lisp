@@ -8,7 +8,7 @@
 
 ;; TODO: Continuation restart
 ;; TODO: Preserve case
-;; TODO: Fix/Look into guile init in all threads
+;; TODO: Fix/Look into guile init in all threads / OR: have a single thread for scheme, all evals go there
 ;; TODO: guile stdout = *standard-output*
 ;; Figure out parsing, inspecting lisp lambda list
 
@@ -30,9 +30,46 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *initialized* nil))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *eval-on-init* nil)
+  (defmacro delay-evaluation (&body body)
+    (format t "delay expression: ~S~%" body)
+    (if *initialized*
+        `(progn ,@body)
+        `(setf *eval-on-init*
+               (append
+                *eval-on-init*
+                (list
+                 (lambda ()
+                   ,@body))))))
+  (defvar *evaluation-cache* (make-hash-table))
+  (defvar *evaluation-cache-counter* 0)
+  (defmacro delay-evaluation-with-cache (&body body)
+    (let ((key (incf *evaluation-cache-counter*)))
+      (format t "Caching ~a: Expression: ~S~%" key body)
+      (delay-evaluation
+        (setf (gethash key *evaluation-cache*) (apply #'eval body)))
+      `(values (gethash ',key *evaluation-cache*))))
+  (defmacro scheme (&body body)
+    `(safe-eval '(begin ,@body)))
+  (defmacro scheme-toplevel (&body body)
+    `(delay-evaluation
+       (scheme ,@body)))
+  (defmacro scheme-expression (expression)
+    `(funcall (delay-evaluation-with-cache 
+                (scheme
+                  (lambda ()
+                    ,expression))))))
+
+(declaim (ftype (function (t) t) safe-eval))
+(defun safe-eval (expression)
+  (declare (ignore expression))
+  (error "Uninitialized Guile environment"))
+
 (defun init ()
   (unless *initialized*
-    (cffi:use-foreign-library api:libguile)
+    (unless (cffi:foreign-library-loaded-p 'api:libguile)
+      (cffi:load-foreign-library 'api:libguile))
     (api:init)
     (api:eval-string "(use-modules (ice-9 exceptions))")
     (api:eval-string
@@ -48,6 +85,21 @@
                                                           (exception-args exception))))))
              (lambda () (eval exp (current-module)))
          #:unwind? #t))")
+    (api:eval-string
+     "(define (record-details scm-record)
+       (let* ((record-type-descriptor (record-type-descriptor scm-record))
+              (record-type-fields (record-type-fields record-type-descriptor))
+              (record-type-name (record-type-name record-type-descriptor)))
+         (list record-type-name
+               (map-in-order (let ((i -1))
+                               (lambda (field)
+                                 (set! i (+ i 1))
+                                 (cons (symbol->keyword field)
+                                       (struct-ref scm-record i))))
+                             record-type-fields))))")
+    (setf (symbol-function 'safe-eval) (let ((scm-safe-eval (api:eval-string "safe-eval")))
+                                         (lambda (expression)
+                                           (scm->lisp (api:scm-call-1 scm-safe-eval (lisp->scm expression))))))
     (eval-on-init)
     (setf *initialized* t)))
 
@@ -65,7 +117,8 @@
     ((api:pairp scm) (cons
                       (scm->lisp (api:car scm))
                       (scm->lisp (api:cdr scm))))
-    ((api:scm->bool (api:scm-call-1 (api:eval-string "procedure?") scm))
+    ((api:scm->bool (api:scm-call-1 (delay-evaluation-with-cache (api:eval-string "procedure?")) scm))
+     ; FIXME: Wrap in safe-eval
      (lambda (&rest args)
        (let* ((scm-args (cffi:foreign-alloc :pointer :initial-contents (mapcar #'lisp->scm args)))
               (result (api:scm-call-n scm scm-args (length args))))
@@ -75,29 +128,36 @@
      (intern
       (string-upcase
        (scm->string
-        (api:scm-call-1 (api:eval-string "symbol->string")
+        (api:scm-call-1 (delay-evaluation-with-cache (api:eval-string "symbol->string"))
                         (api:scm-call-1 (api:eval-string "keyword->symbol") scm))))
       'keyword))
     ((api:scm->bool (api:symbolp scm))
      (intern
       (string-upcase
        (scm->string
-        (api:scm-call-1 (api:eval-string "symbol->string") scm)))))
-    ((scm->lisp (api:scm-call-1 (api:eval-string "record?") scm))
-     (convert-record (scm->lisp (api:scm-call-1 (api:eval-string "record-details") scm))))
+        (api:scm-call-1 (delay-evaluation-with-cache (api:eval-string "symbol->string")) scm)))))
+    ((scm->lisp (api:scm-call-1 (delay-evaluation-with-cache (api:eval-string "record?")) scm))
+     (convert-record (scm->lisp (api:scm-call-1 (delay-evaluation-with-cache (api:eval-string "record-details")) scm))))
     (t (error "Could not convert scheme object"))))
 
-;; TODO: Add disable, store *readtable*
-(defun enable-scheme-syntax ()
-  (set-dispatch-macro-character #\# #\t
-                                (lambda (stream disp-char sub-char)
-                                  (declare (ignore stream disp-char sub-char))
-                                  ''|#T|))
-  (set-dispatch-macro-character #\# #\f
-                                (lambda (stream disp-char sub-char)
-                                  (declare (ignore stream disp-char sub-char))
-                                  ''|#F|)))
-
+(defun lisp->scm (lisp-object)
+  (labels ((as-is () (api:eval-string (format nil "~S" lisp-object))))
+    (case lisp-object
+      ((t #t) (delay-evaluation-with-cache
+                (api:eval-string "#t")))
+      (#f (delay-evaluation-with-cache
+            (api:eval-string "#f")))
+      (otherwise
+       (etypecase lisp-object
+         (null (delay-evaluation-with-cache (api:eval-string "'()")))
+         (cons (api:cons
+                (lisp->scm (car lisp-object))
+                (lisp->scm (cdr lisp-object))))
+         (keyword (api:string->scm-keyword (string-downcase (string lisp-object))))
+         (symbol (api:string->scm-symbol (string-downcase (string lisp-object))))
+         (number (as-is))
+         (string (as-is))
+         (cffi:foreign-pointer lisp-object))))))
 
 (defun convert-record (record-details)
   (destructuring-bind (name slots) record-details
@@ -140,74 +200,13 @@
     :accessor scm-exception-message
     :type string)))
 
-(defun lisp->scm (lisp-object)
-  (labels ((as-is () (api:eval-string (format nil "~S" lisp-object))))
-    (case lisp-object
-      ((t #t) (delay-evaluation-with-cache
-                (api:eval-string "#t")))
-      (#f (delay-evaluation-with-cache
-            (api:eval-string "#f")))
-      (otherwise
-        (etypecase lisp-object
-          (null (api:eval-string "'()"))
-          (cons (api:cons
-                 (lisp->scm (car lisp-object))
-                 (lisp->scm (cdr lisp-object))))
-          (keyword (api:string->scm-keyword (string-downcase (string lisp-object))))
-          (symbol (api:string->scm-symbol (string-downcase (string lisp-object))))
-          (number (as-is))
-          (string (as-is))
-          (cffi:foreign-pointer lisp-object))))))
-
 (defun eval-string (string)
   (scm->lisp (api:eval-string string)))
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defvar *eval-on-init* nil)
-  (defmacro delay-evaluation (&body body)
-    (if *initialized*
-        `(progn ,@body)
-        `(setf *eval-on-init*
-               (append
-                (list
-                 (lambda ()
-                  ,@body))
-                *eval-on-init*))))
-  (defvar *evaluation-cache* (make-hash-table))
-  (defvar *evaluation-cache-counter* 0)
-  (defmacro delay-evaluation-with-cache (&body body)
-    (let ((key (incf *evaluation-cache-counter*)))
-      (delay-evaluation
-        (setf (gethash key *evaluation-cache*) (apply #'eval body)))
-      `(values (gethash ',key *evaluation-cache*))))
-  (defmacro scheme (&body body)
-    `(funcall (eval-string "safe-eval") '(begin ,@body)))
-  (defmacro scheme-toplevel (&body body)
-    `(delay-evaluation
-       (scheme ,@body)))
-  (defmacro scheme-expression (expression)
-    `(funcall (delay-evaluation-with-cache 
-                (scheme
-                  (lambda ()
-                    ,expression))))))
 
 (defun eval-on-init ()
   (loop for function in *eval-on-init*
         do (funcall function))
   (setf *eval-on-init* nil))
-
-(scheme-toplevel
-  (define (record-details scm-record)
-    (let* ((record-type-descriptor (record-type-descriptor scm-record))
-           (record-type-fields (record-type-fields record-type-descriptor))
-           (record-type-name (record-type-name record-type-descriptor)))
-      (list record-type-name
-            (map-in-order (let ((i -1))
-                            (lambda (field)
-                              (set! i (+ i 1))
-                              (cons (symbol->keyword field)
-                                    (struct-ref scm-record i))))
-                          record-type-fields)))))
 
 (defmacro define-scheme-procedure (name lambda-list &body body)
   `(progn
