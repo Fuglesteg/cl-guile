@@ -6,8 +6,8 @@
 
 (in-package :guile)
 
-;; TODO: Error handling (with continuation restart)
 ;; TODO: Preserve case / #t, #f ... (readtable?)
+;; TODO: Continuation restart
 ;; TODO: Fix/Look into guile init in all threads
 ;; TODO: Optimize `scheme` macro by evaluation to function and calling function
 ;; TODO: guile stdout = *standard-output*
@@ -25,13 +25,14 @@
      "(define (safe-eval exp)
        (with-exception-handler
            (lambda (exception)
-             (call-with-output-string
-              (lambda (port)
-                (print-exception port
-                                 #f
-                                 (exception-kind exception)
-                                 (exception-args exception)))))
-         (lambda () (eval exp (current-module)))
+             (handle-scheme-exception exception
+                                      (call-with-output-string
+                                       (lambda (port)
+                                         (print-exception port
+                                                          #f
+                                                          (exception-kind exception)
+                                                          (exception-args exception))))))
+             (lambda () (eval exp (current-module)))
          #:unwind? #t))")
     (eval-on-init)
     (setf *initialized* t)))
@@ -183,17 +184,23 @@
                                  0
                                  (cffi:callback ,name))))))
 
-(define-condition scheme-error (error) ())
+(define-condition scheme-error (error)
+  ((exception
+    :initarg :exception
+    :initform nil
+    :type scm-exception)
+   (message
+    :initarg :message
+    :accessor scheme-error-message
+    :initform ""
+    :type string))
+  (:report (lambda (condition stream)
+             (format stream "An exception occurred in the scheme program:~%~a" (scheme-error-message condition)))))
 
-(define-scheme-procedure handle-scheme-exception (exception)
-  ; 1. Get scheme restarts
-  ; 2. Restart-bind
-  ; 3. signal scheme-error
-  (break "~S" exception)
-  #+nil(with-condition-restarts 'scheme-error
-      (loop for handler in (exception-handlers exception)
-            do 'something)
-    (signal 'scheme-error (exception-message exception))))
+(define-scheme-procedure handle-scheme-exception (exception message)
+  (error 'scheme-error
+          :message message
+          :exception exception))
    
 ;; Example make procedure callable from scheme
 (define-scheme-procedure hello-from-scheme ()
