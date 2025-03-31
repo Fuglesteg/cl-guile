@@ -9,7 +9,6 @@
 ;; TODO: Continuation restart
 ;; TODO: Preserve case
 ;; TODO: Fix/Look into guile init in all threads
-;; TODO: Optimize `scheme` macro by evaluation to function and calling function
 ;; TODO: guile stdout = *standard-output*
 ;; Figure out parsing, inspecting lisp lambda list
 
@@ -104,11 +103,11 @@
       (if (consp name)
           name
           (list name name))
-  `(progn
-     (defclass ,class-name (,@superclasses scm-record)
-       ,slots)
-     (setf *scheme-record-types* (append (list (cons ',record-name ',class-name))
-                                         *scheme-record-types*)))))
+    `(progn
+       (defclass ,class-name (,@superclasses scm-record)
+         ,slots)
+       (setf *scheme-record-types* (append (list (cons ',record-name ',class-name))
+                                           *scheme-record-types*)))))
 
 (define-scheme-record (scm-compound-exception &compound-exception) ()
   ((components
@@ -128,17 +127,22 @@
 
 (defun lisp->scm (lisp-object)
   (labels ((as-is () (api:eval-string (format nil "~S" lisp-object))))
-    (if (eq t lisp-object)
-        (api:eval-string "#t")
+    (case lisp-object
+      ((t #t) (delay-evaluation-with-cache
+                (api:eval-string "#t")))
+      (#f (delay-evaluation-with-cache
+            (api:eval-string "#f")))
+      (otherwise
         (etypecase lisp-object
-          (null (api:eval-string "#f"))
+          (null (api:eval-string "'()"))
           (cons (api:cons
                  (lisp->scm (car lisp-object))
                  (lisp->scm (cdr lisp-object))))
           (keyword (api:string->scm-keyword (string-downcase (string lisp-object))))
           (symbol (api:string->scm-symbol (string-downcase (string lisp-object))))
           (number (as-is))
-          (string (as-is))))))
+          (string (as-is))
+          (cffi:foreign-pointer lisp-object))))))
 
 (defun eval-string (string)
   (scm->lisp (api:eval-string string)))
@@ -155,9 +159,7 @@
                   ,@body))
                 *eval-on-init*))))
   (defmacro scheme (&body body)
-    `(eval-string
-      ,(let ((*print-case* :downcase))
-         (format nil "(safe-eval '(begin ~{~S~}))" body))))
+    `(funcall (eval-string "safe-eval") '(begin ,@body)))
   (defmacro scheme-toplevel (&body body)
     `(delay-evaluation
        (scheme ,@body))))
