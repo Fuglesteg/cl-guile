@@ -158,11 +158,23 @@
                  (lambda ()
                   ,@body))
                 *eval-on-init*))))
+  (defvar *evaluation-cache* (make-hash-table))
+  (defvar *evaluation-cache-counter* 0)
+  (defmacro delay-evaluation-with-cache (&body body)
+    (let ((key (incf *evaluation-cache-counter*)))
+      (delay-evaluation
+        (setf (gethash key *evaluation-cache*) (apply #'eval body)))
+      `(values (gethash ',key *evaluation-cache*))))
   (defmacro scheme (&body body)
     `(funcall (eval-string "safe-eval") '(begin ,@body)))
   (defmacro scheme-toplevel (&body body)
     `(delay-evaluation
-       (scheme ,@body))))
+       (scheme ,@body)))
+  (defmacro scheme-expression (expression)
+    `(funcall (delay-evaluation-with-cache 
+                (scheme
+                  (lambda ()
+                    ,expression))))))
 
 (defun eval-on-init ()
   (loop for function in *eval-on-init*
