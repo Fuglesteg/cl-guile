@@ -12,6 +12,21 @@
 ;; TODO: guile stdout = *standard-output*
 ;; Figure out parsing, inspecting lisp lambda list
 
+;; TODO: Add disable, store *readtable*
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun enable-scheme-syntax ()
+    (set-dispatch-macro-character #\# #\t
+                                  (lambda (stream disp-char sub-char)
+                                    (declare (ignore stream disp-char sub-char))
+                                    ''|#T|))
+    (set-dispatch-macro-character #\# #\f
+                                  (lambda (stream disp-char sub-char)
+                                    (declare (ignore stream disp-char sub-char))
+                                    ''|#F|))))
+
+; Enable scheme syntax when reading current file
+#.(enable-scheme-syntax)
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *initialized* nil))
 
