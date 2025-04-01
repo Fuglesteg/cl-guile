@@ -73,7 +73,7 @@
     (api:init)
     (api:eval-string "(use-modules (ice-9 exceptions))")
     (api:eval-string
-     "(define (safe-eval exp)
+     "(define (call-with-exception-handling procedure)
        (with-exception-handler
            (lambda (exception)
              (handle-scheme-exception exception
@@ -83,8 +83,17 @@
                                                           #f
                                                           (exception-kind exception)
                                                           (exception-args exception))))))
-             (lambda () (eval exp (current-module)))
+         procedure
          #:unwind? #t))")
+    (api:eval-string
+     "(define (safe-eval exp)
+       (call-with-exception-handling (lambda () (eval exp (current-module)))))")
+    (api:eval-string
+     "(define (wrap-with-exception-handling procedure)
+       (lambda args
+         (call-with-exception-handling
+          (lambda ()
+            (apply procedure args)))))")
     (api:eval-string
      "(define (record-details scm-record)
        (let* ((record-type-descriptor (record-type-descriptor scm-record))
@@ -120,12 +129,15 @@
                       (scm->lisp (api:car scm))
                       (scm->lisp (api:cdr scm))))
     ((api:scm->bool (api:scm-call-1 (delay-evaluation-with-cache (api:eval-string "procedure?")) scm))
-     ; FIXME: Wrap in safe-eval
-     (lambda (&rest args)
-       (let* ((scm-args (cffi:foreign-alloc :pointer :initial-contents (mapcar #'lisp->scm args)))
-              (result (api:scm-call-n scm scm-args (length args))))
-         (cffi:foreign-free scm-args)
-         (scm->lisp result))))
+     (let ((scm-procedure (api:scm-call-1 
+                           (delay-evaluation-with-cache
+                             (api:eval-string "wrap-with-exception-handling"))
+                           scm)))
+       (lambda (&rest args)
+         (let* ((scm-args (cffi:foreign-alloc :pointer :initial-contents (mapcar #'lisp->scm args)))
+                (result (api:scm-call-n scm-procedure scm-args (length args))))
+           (cffi:foreign-free scm-args)
+           (scm->lisp result)))))
     ((api:keywordp scm)
      (intern
       (string-upcase
