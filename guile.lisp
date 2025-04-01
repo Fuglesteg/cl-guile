@@ -31,7 +31,7 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *eval-on-init* nil)
   (defmacro delay-evaluation (&body body)
-    (format t "delay expression: ~S~%" body)
+    #+dev (format t "delay expression: ~S~%" body)
     (if *initialized*
         `(progn ,@body)
         `(setf *eval-on-init*
@@ -44,7 +44,7 @@
   (defvar *evaluation-cache-counter* 0)
   (defmacro delay-evaluation-with-cache (&body body)
     (let ((key (incf *evaluation-cache-counter*)))
-      (format t "Caching ~a: Expression: ~S~%" key body)
+      #+dev (format t "Caching ~a: Expression: ~S~%" key body)
       (delay-evaluation
         (setf (gethash key *evaluation-cache*) (apply #'eval body)))
       `(values (gethash ',key *evaluation-cache*))))
