@@ -55,11 +55,11 @@
   (defmacro scheme-toplevel (&body body)
     `(delay-evaluation
        (scheme ,@body)))
-  (defmacro scheme-expression (expression)
+  (defmacro scheme-expression (&body expression)
     `(funcall (delay-evaluation-with-cache 
                 (scheme
                   (lambda ()
-                    ,expression))))))
+                    ,@expression))))))
 
 (declaim (ftype (function (t) t) safe-eval))
 (defun safe-eval (expression)
@@ -106,6 +106,8 @@
 (defun scm->string (scm)
       (values (cffi:foreign-string-to-lisp (api:scm->string scm))))
 
+;; TODO: Vectors
+;; TODO: Arrays
 (defun scm->lisp (scm)
   (cond
     ((api:scm-null-pointer-p scm) nil)
@@ -143,9 +145,9 @@
 (defun lisp->scm (lisp-object)
   (labels ((as-is () (api:eval-string (format nil "~S" lisp-object))))
     (case lisp-object
-      ((t #t) (delay-evaluation-with-cache
+      ((t |#T|) (delay-evaluation-with-cache
                 (api:eval-string "#t")))
-      (#f (delay-evaluation-with-cache
+      (|#F| (delay-evaluation-with-cache
             (api:eval-string "#f")))
       (otherwise
        (etypecase lisp-object
