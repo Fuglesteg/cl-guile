@@ -2,7 +2,23 @@
   (:use :cl)
   (:local-nicknames (:api :guile/api))
   (:import-from :cffi
-                :defcallback))
+                :defcallback)
+  (:export :init
+           :safe-eval
+           :delay-evaluation
+           :delay-evaluation-with-cache
+           :scheme
+           :scheme-expression
+           :scheme-toplevel
+           :define-scheme-record
+           :define-scheme-procedure
+           :scheme-error
+           :scheme-error-exception
+           :scheme-error-message
+           :scm-exception-with-message
+           :scm-exception
+           :scm-compound-exception
+           :scm-compound-exception-components))
 
 (in-package :guile)
 
@@ -240,7 +256,7 @@
   ((exception
     :initarg :exception
     :initform nil
-    :type scm-exception)
+    :type scheme-error-exception)
    (message
     :initarg :message
     :accessor scheme-error-message
