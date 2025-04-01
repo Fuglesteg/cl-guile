@@ -24,8 +24,6 @@
                                     (declare (ignore stream disp-char sub-char))
                                     ''|#F|))))
 
-; Enable scheme syntax when reading current file
-#.(enable-scheme-syntax)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *initialized* nil))
